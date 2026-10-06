@@ -11,7 +11,7 @@ load_dotenv()
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.documents import Document
 
 # Paths
@@ -19,8 +19,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
 VECTORSTORE_DIR = os.path.join(BASE_DIR, "data", "vectorstore")
 
-# Embedding model (local, no API key needed)
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Embedding model (Google GenAI)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 
 # Google GenAI configuration
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
@@ -49,7 +49,6 @@ class RAGEngine:
 
         try:
             print(f"  [>] Initializing Google GenAI ({GEMINI_MODEL})...")
-            from langchain_google_genai import ChatGoogleGenerativeAI
             self.llm = ChatGoogleGenerativeAI(
                 model=GEMINI_MODEL,
                 api_key=api_key,
@@ -70,12 +69,12 @@ class RAGEngine:
         """Initialize the RAG engine components."""
         print("[*] Initializing RAG Engine...")
 
-        # Initialize embeddings (local model)
-        print("  [>] Loading embedding model...")
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL,
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
+        # Initialize Google GenAI embeddings
+        print("  [>] Loading Google GenAI embedding model...")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model=EMBEDDING_MODEL,
+            google_api_key=api_key,
         )
         print(f"  [OK] Embedding model loaded: {EMBEDDING_MODEL}")
 
@@ -90,12 +89,22 @@ class RAGEngine:
 
     def _load_or_create_vectorstore(self):
         """Load existing vectorstore or create from documents."""
-        if os.path.exists(os.path.join(VECTORSTORE_DIR, "index.faiss")):
+        index_file = os.path.join(VECTORSTORE_DIR, "index.faiss")
+        if os.path.exists(index_file):
             print("  [>] Loading existing vectorstore...")
-            self.vectorstore = FAISS.load_local(
-                VECTORSTORE_DIR, self.embeddings, allow_dangerous_deserialization=True
-            )
-            print(f"  [OK] Vectorstore loaded")
+            try:
+                self.vectorstore = FAISS.load_local(
+                    VECTORSTORE_DIR, self.embeddings, allow_dangerous_deserialization=True
+                )
+                test_dim = len(self.embeddings.embed_query("test"))
+                if self.vectorstore.index.d != test_dim:
+                    print(f"  [WARN] Vectorstore dimension mismatch ({self.vectorstore.index.d} vs {test_dim}). Rebuilding index...")
+                    self.rebuild_index()
+                else:
+                    print(f"  [OK] Vectorstore loaded")
+            except Exception as e:
+                print(f"  [WARN] Could not load vectorstore ({e}), rebuilding index...")
+                self.rebuild_index()
         else:
             print("  [>] No vectorstore found, creating from documents...")
             self._create_vectorstore()
