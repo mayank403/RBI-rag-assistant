@@ -109,7 +109,8 @@ async function performSearch(question) {
 
         // Render answer
         answerContent.innerHTML = formatAnswer(result.answer);
-        answerMeta.textContent = `Response time: ${result.response_time}s • ${result.sources.length} sources found`;
+        const providerTag = result.provider ? ` • ${result.provider.toUpperCase()} (${result.model || ''})` : '';
+        answerMeta.textContent = `Response time: ${result.response_time}s • ${result.sources.length} sources found${providerTag}`;
 
         // Render sources
         renderSources(result.sources);
@@ -299,20 +300,32 @@ async function showStatsModal() {
         const stats = await apiStats();
         const health = await apiHealth();
 
+        const activeProviderText = health.active_provider 
+            ? `${health.active_provider === 'gemini' ? 'Google Gemini' : 'Ollama'} (${health.active_model || ''})`
+            : 'None (Retrieval Only)';
+
         statsGrid.innerHTML = `
             <div class="stat-card">
                 <div class="stat-label">Total Documents</div>
                 <div class="stat-value">${stats.total_documents}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Ollama Status</div>
-                <div class="stat-value small ${health.ollama_available ? 'success' : 'warning'}">
-                    ${health.ollama_available ? '● Connected' : '○ Not Connected'}
+                <div class="stat-label">Active AI Provider</div>
+                <div class="stat-value small ${health.llm_available ? 'success' : 'warning'}">
+                    ${activeProviderText}
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">LLM Model</div>
-                <div class="stat-value small">${stats.ollama_model}</div>
+                <div class="stat-label">Google GenAI</div>
+                <div class="stat-value small ${health.gemini_available ? 'success' : 'muted'}">
+                    ${health.gemini_available ? '● Ready' : '○ Not Configured'}
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Ollama (Local)</div>
+                <div class="stat-value small ${health.ollama_available ? 'success' : 'warning'}">
+                    ${health.ollama_available ? '● Connected' : '○ Offline'}
+                </div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Embedding Model</div>
@@ -324,10 +337,10 @@ async function showStatsModal() {
                     ${stats.vectorstore_exists ? '● Indexed' : '○ Not Found'}
                 </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" style="grid-column: 1 / -1;">
                 <div class="stat-label">Document Types</div>
                 <div class="stat-value small">
-                    ${Object.entries(stats.types || {}).map(([k, v]) => `${formatType(k)}: ${v}`).join('<br>')}
+                    ${Object.entries(stats.types || {}).map(([k, v]) => `${formatType(k)}: ${v}`).join(' &nbsp;•&nbsp; ')}
                 </div>
             </div>
         `;
@@ -350,8 +363,19 @@ async function checkHealth() {
 
     try {
         const health = await apiHealth();
-        statusDot.className = 'status-dot active';
-        statusText.textContent = health.ollama_available ? 'AI Ready' : 'Retrieval Only';
+        if (health.llm_available) {
+            statusDot.className = 'status-dot active';
+            if (health.active_provider === 'gemini') {
+                statusText.textContent = `Gemini Ready (${health.active_model || 'flash'})`;
+            } else if (health.active_provider === 'ollama') {
+                statusText.textContent = `Ollama Ready (${health.active_model || 'llama3'})`;
+            } else {
+                statusText.textContent = 'AI Ready';
+            }
+        } else {
+            statusDot.className = 'status-dot warning';
+            statusText.textContent = 'Retrieval Only';
+        }
     } catch {
         statusDot.className = 'status-dot error';
         statusText.textContent = 'Offline';

@@ -1,10 +1,13 @@
 """
-RAG Engine - Retrieval Augmented Generation pipeline using LangChain, FAISS, and Ollama
+RAG Engine - Retrieval Augmented Generation pipeline using LangChain, FAISS, Google GenAI, and Ollama
 """
 
 import os
 import json
 from typing import List, Dict
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -19,9 +22,11 @@ VECTORSTORE_DIR = os.path.join(BASE_DIR, "data", "vectorstore")
 # Embedding model (local, no API key needed)
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
-# Ollama configuration
-OLLAMA_MODEL = "llama3"  # Can be changed to mistral, phi3, etc.
-OLLAMA_BASE_URL = "http://localhost:11434"
+# LLM configuration
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()  # "gemini", "ollama", or "auto"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 class RAGEngine:
@@ -32,8 +37,75 @@ class RAGEngine:
         self.vectorstore = None
         self.llm = None
         self.qa_chain = None
+        self.active_provider = None  # "gemini", "ollama", or None
+        self.active_model = None
         self._initialized = False
+        self._llm_available = False
         self._ollama_available = False
+        self._gemini_available = False
+
+    def _init_gemini(self) -> bool:
+        """Initialize Google GenAI (Gemini) via langchain-google-genai."""
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            print("  [INFO] No Google/Gemini API key found in environment.")
+            return False
+
+        models_to_try = [GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+        # Remove duplicates while preserving order
+        seen = set()
+        models = [m for m in models_to_try if not (m in seen or seen.add(m))]
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        for model_name in models:
+            try:
+                print(f"  [>] Connecting to Google GenAI ({model_name})...")
+                llm = ChatGoogleGenerativeAI(
+                    model=model_name,
+                    api_key=api_key,
+                    temperature=0.3,
+                    max_output_tokens=1024,
+                )
+                # Quick verification
+                llm.invoke("Hi")
+                self.llm = llm
+                self.active_provider = "gemini"
+                self.active_model = model_name
+                self._gemini_available = True
+                self._llm_available = True
+                print(f"  [OK] Google GenAI connected: {model_name}")
+                return True
+            except Exception as e:
+                print(f"  [WARN] Google GenAI ({model_name}) error: {e}")
+
+        return False
+
+    def _init_ollama(self) -> bool:
+        """Initialize Ollama LLM."""
+        try:
+            print(f"  [>] Connecting to Ollama ({OLLAMA_MODEL})...")
+            from langchain_ollama import OllamaLLM
+
+            llm = OllamaLLM(
+                model=OLLAMA_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                temperature=0.3,
+                num_predict=1024,
+            )
+            # Test connection
+            llm.invoke("Hello")
+            self.llm = llm
+            self.active_provider = "ollama"
+            self.active_model = OLLAMA_MODEL
+            self._ollama_available = True
+            self._llm_available = True
+            print(f"  [OK] Ollama connected: {OLLAMA_MODEL}")
+            return True
+        except Exception as e:
+            print(f"  [WARN] Ollama not available: {e}")
+            self._ollama_available = False
+            return False
 
     def initialize(self):
         """Initialize the RAG engine components."""
@@ -48,25 +120,31 @@ class RAGEngine:
         )
         print(f"  [OK] Embedding model loaded: {EMBEDDING_MODEL}")
 
-        # Try to initialize Ollama
-        try:
-            print(f"  [>] Connecting to Ollama ({OLLAMA_MODEL})...")
-            from langchain_ollama import OllamaLLM
+        # Initialize LLM based on provider preference
+        pref = LLM_PROVIDER
+        has_gemini_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
 
-            self.llm = OllamaLLM(
-                model=OLLAMA_MODEL,
-                base_url=OLLAMA_BASE_URL,
-                temperature=0.3,
-                num_predict=1024,
-            )
-            # Test the connection
-            self.llm.invoke("Hello")
-            self._ollama_available = True
-            print(f"  [OK] Ollama connected: {OLLAMA_MODEL}")
-        except Exception as e:
-            print(f"  [WARN] Ollama not available: {e}")
-            print("  [INFO] Falling back to retrieval-only mode (no LLM generation)")
-            self._ollama_available = False
+        if pref == "gemini":
+            if not self._init_gemini():
+                print("  [INFO] Gemini failed, attempting Ollama fallback...")
+                self._init_ollama()
+        elif pref == "ollama":
+            if not self._init_ollama():
+                print("  [INFO] Ollama failed, attempting Gemini fallback...")
+                self._init_gemini()
+        else:  # "auto"
+            if has_gemini_key:
+                # Prefer Google GenAI when key is available
+                if not self._init_gemini():
+                    print("  [INFO] Gemini failed, attempting Ollama fallback...")
+                    self._init_ollama()
+            else:
+                if not self._init_ollama():
+                    print("  [INFO] Ollama failed, attempting Gemini fallback...")
+                    self._init_gemini()
+
+        if not self._llm_available:
+            print("  [INFO] Running in retrieval-only mode (no LLM generation)")
 
         # Load or create vectorstore
         self._load_or_create_vectorstore()
@@ -171,15 +249,21 @@ class RAGEngine:
                 )
 
         # Generate answer using LLM or return context-based response
-        if self._ollama_available:
+        if self._llm_available and self.llm:
             answer = self._generate_answer(question, relevant_docs)
         else:
             answer = self._generate_retrieval_answer(question, relevant_docs)
 
-        return {"answer": answer, "sources": sources, "query": question}
+        return {
+            "answer": answer,
+            "sources": sources,
+            "query": question,
+            "provider": self.active_provider,
+            "model": self.active_model,
+        }
 
     def _generate_answer(self, question: str, docs: List[Document]) -> str:
-        """Generate answer using Ollama LLM."""
+        """Generate answer using active LLM (Gemini or Ollama)."""
         context = "\n\n---\n\n".join(
             [
                 f"Source: {doc.metadata.get('title', 'Unknown')}\n{doc.page_content}"
@@ -202,9 +286,23 @@ Answer:"""
 
         try:
             response = self.llm.invoke(prompt)
-            return response
+            # Handle string response (Ollama) and AIMessage (ChatGoogleGenerativeAI)
+            if isinstance(response, str):
+                return response
+            elif hasattr(response, "content"):
+                content = response.content
+                if isinstance(content, str):
+                    return content
+                elif isinstance(content, list):
+                    return "".join(
+                        part.get("text", "") if isinstance(part, dict) else str(part)
+                        for part in content
+                    )
+                return str(content)
+            return str(response)
         except Exception as e:
-            return f"Error generating response from LLM: {str(e)}. Please ensure Ollama is running with the {OLLAMA_MODEL} model."
+            provider_name = self.active_provider or "LLM"
+            return f"Error generating response from {provider_name} ({self.active_model}): {str(e)}"
 
     def _generate_retrieval_answer(
         self, question: str, docs: List[Document]
@@ -227,7 +325,7 @@ Answer:"""
 
         answer_parts.append(
             "\n---\n*Note: This response is generated from document retrieval only. "
-            "For AI-generated summaries, please start Ollama with a model like llama3.2.*"
+            "Configure GEMINI_API_KEY or start Ollama for AI-generated summaries.*"
         )
 
         return "\n".join(answer_parts)
@@ -241,8 +339,13 @@ Answer:"""
             "vectorstore_exists": os.path.exists(
                 os.path.join(VECTORSTORE_DIR, "index.faiss")
             ),
+            "llm_available": self._llm_available,
+            "active_provider": self.active_provider,
+            "active_model": self.active_model,
             "ollama_available": self._ollama_available,
+            "gemini_available": self._gemini_available,
             "ollama_model": OLLAMA_MODEL,
+            "gemini_model": GEMINI_MODEL,
             "embedding_model": EMBEDDING_MODEL,
         }
 

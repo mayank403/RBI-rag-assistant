@@ -12,6 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from rag_engine import rag_engine
 from scraper import run_scraper
 
@@ -66,6 +69,8 @@ class QueryResponse(BaseModel):
     sources: List[dict]
     query: str
     response_time: float
+    provider: Optional[str] = None
+    model: Optional[str] = None
 
 
 class ScrapeRequest(BaseModel):
@@ -99,6 +104,8 @@ async def query_rag(request: QueryRequest):
             sources=result["sources"],
             query=result["query"],
             response_time=round(response_time, 2),
+            provider=result.get("provider"),
+            model=result.get("model"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
@@ -151,6 +158,10 @@ async def health_check():
     return {
         "status": "healthy",
         "rag_initialized": rag_engine._initialized,
+        "llm_available": rag_engine._llm_available,
+        "active_provider": rag_engine.active_provider,
+        "active_model": rag_engine.active_model,
+        "gemini_available": rag_engine._gemini_available,
         "ollama_available": rag_engine._ollama_available,
     }
 
