@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBI RAG Assistant — Intelligent Regulatory Intelligence</title>
+    <meta name="description"
+        content="AI-powered search and Q&A system for RBI circulars, notifications, press releases, and regulatory documents.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <!-- Animated Background -->
+    <div class="bg-grid"></div>
+    <div class="bg-gradient-orb bg-orb-1"></div>
+    <div class="bg-gradient-orb bg-orb-2"></div>
+    <div class="bg-gradient-orb bg-orb-3"></div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <div class="header-inner">
+            <div class="logo-group">
+                <div class="logo-icon">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
+                        <path d="M8 16L14 10L20 16L14 22Z" fill="white" opacity="0.9" />
+                        <path d="M14 16L20 10L26 16L20 22Z" fill="white" opacity="0.6" />
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
+                                <stop offset="0%" stop-color="#6366f1" />
+                                <stop offset="100%" stop-color="#8b5cf6" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="logo-text">RBI <span class="accent">RAG</span> Assistant</h1>
+                    <p class="logo-subtitle">Reserve Bank of India • Regulatory Intelligence</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+                <button class="btn-icon" id="settingsBtn" title="System Info">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Hero Section -->
+        <section class="hero" id="heroSection">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                    Powered by LangChain + FAISS + Ollama
+                </div>
+                <h2 class="hero-title">
+                    Ask anything about<br>
+                    <span class="gradient-text">RBI Regulations</span>
+                </h2>
+                <p class="hero-description">
+                    Search through RBI circulars, notifications, master directions, and press releases using
+                    AI-powered retrieval augmented generation.
+                </p>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-container" id="searchContainer">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                    <textarea id="queryInput" class="search-input"
+                        placeholder="Ask about RBI regulations, circulars, or policies..."
+                        rows="1"></textarea>
+                    <button class="search-btn" id="searchBtn" title="Search">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="search-meta">
+                    <span class="search-hint">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                            <path d="M12 16v-4M12 8h.01" />
+                        </svg>
+                        Press Enter to search, Shift+Enter for new line
+                    </span>
+                </div>
+            </div>
+
+            <!-- Suggestions -->
+            <div class="suggestions-grid" id="suggestionsGrid">
+                <!-- Populated by JS -->
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <!-- Loading State -->
+            <div class="loading-state" id="loadingState" style="display: none;">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p class="loading-text">Searching through RBI documents...</p>
+                <p class="loading-subtext">Retrieving relevant information and generating response</p>
+            </div>
+
+            <!-- Answer Card -->
+            <div class="answer-card" id="answerCard" style="display: none;">
+                <div class="answer-header">
+                    <div class="answer-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="answer-title">AI Response</h3>
+                        <span class="answer-meta" id="answerMeta"></span>
+                    </div>
+                </div>
+                <div class="answer-content" id="answerContent"></div>
+            </div>
+
+            <!-- Sources Card -->
+            <div class="sources-card" id="sourcesCard" style="display: none;">
+                <div class="sources-header">
+                    <h3 class="sources-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                        Referenced Sources
+                    </h3>
+                    <span class="sources-count" id="sourcesCount"></span>
+                </div>
+                <div class="sources-list" id="sourcesList"></div>
+            </div>
+        </section>
+
+        <!-- Chat History -->
+        <section class="history-section" id="historySection" style="display: none;">
+            <h3 class="history-title">Previous Queries</h3>
+            <div class="history-list" id="historyList"></div>
+        </section>
+    </main>
+
+    <!-- System Info Modal -->
+    <div class="modal-overlay" id="modalOverlay" style="display: none;">
+        <div class="modal" id="systemModal">
+            <div class="modal-header">
+                <h3>System Information</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="stats-grid" id="statsGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="rebuildBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                    </svg>
+                    Rebuild Index
+                </button>
+                <button class="btn btn-secondary" id="scrapeBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
+                    </svg>
+                    Scrape Live Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>RBI RAG Prototype • Data sourced from <a href="https://www.rbi.org.in" target="_blank"
+                rel="noopener">rbi.org.in</a></p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
