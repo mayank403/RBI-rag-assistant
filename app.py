@@ -162,7 +162,6 @@ async def health_check():
         "active_provider": rag_engine.active_provider,
         "active_model": rag_engine.active_model,
         "gemini_available": rag_engine._gemini_available,
-        "ollama_available": rag_engine._ollama_available,
     }
 
 

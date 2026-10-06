@@ -1,5 +1,5 @@
 """
-RAG Engine - Retrieval Augmented Generation pipeline using LangChain, FAISS, Google GenAI, and Ollama
+RAG Engine - Retrieval Augmented Generation pipeline using LangChain, FAISS, and Google GenAI
 """
 
 import os
@@ -22,11 +22,8 @@ VECTORSTORE_DIR = os.path.join(BASE_DIR, "data", "vectorstore")
 # Embedding model (local, no API key needed)
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
-# LLM configuration
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()  # "gemini", "ollama", or "auto"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+# Google GenAI configuration
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 class RAGEngine:
@@ -37,11 +34,10 @@ class RAGEngine:
         self.vectorstore = None
         self.llm = None
         self.qa_chain = None
-        self.active_provider = None  # "gemini", "ollama", or None
+        self.active_provider = None  # "gemini" or None
         self.active_model = None
         self._initialized = False
         self._llm_available = False
-        self._ollama_available = False
         self._gemini_available = False
 
     def _init_gemini(self) -> bool:
@@ -51,60 +47,23 @@ class RAGEngine:
             print("  [INFO] No Google/Gemini API key found in environment.")
             return False
 
-        models_to_try = [GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
-        # Remove duplicates while preserving order
-        seen = set()
-        models = [m for m in models_to_try if not (m in seen or seen.add(m))]
-
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        for model_name in models:
-            try:
-                print(f"  [>] Connecting to Google GenAI ({model_name})...")
-                llm = ChatGoogleGenerativeAI(
-                    model=model_name,
-                    api_key=api_key,
-                    temperature=0.3,
-                    max_output_tokens=1024,
-                )
-                # Quick verification
-                llm.invoke("Hi")
-                self.llm = llm
-                self.active_provider = "gemini"
-                self.active_model = model_name
-                self._gemini_available = True
-                self._llm_available = True
-                print(f"  [OK] Google GenAI connected: {model_name}")
-                return True
-            except Exception as e:
-                print(f"  [WARN] Google GenAI ({model_name}) error: {e}")
-
-        return False
-
-    def _init_ollama(self) -> bool:
-        """Initialize Ollama LLM."""
         try:
-            print(f"  [>] Connecting to Ollama ({OLLAMA_MODEL})...")
-            from langchain_ollama import OllamaLLM
-
-            llm = OllamaLLM(
-                model=OLLAMA_MODEL,
-                base_url=OLLAMA_BASE_URL,
+            print(f"  [>] Initializing Google GenAI ({GEMINI_MODEL})...")
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            self.llm = ChatGoogleGenerativeAI(
+                model=GEMINI_MODEL,
+                api_key=api_key,
                 temperature=0.3,
-                num_predict=1024,
+                max_output_tokens=1024,
             )
-            # Test connection
-            llm.invoke("Hello")
-            self.llm = llm
-            self.active_provider = "ollama"
-            self.active_model = OLLAMA_MODEL
-            self._ollama_available = True
+            self.active_provider = "gemini"
+            self.active_model = GEMINI_MODEL
+            self._gemini_available = True
             self._llm_available = True
-            print(f"  [OK] Ollama connected: {OLLAMA_MODEL}")
+            print(f"  [OK] Google GenAI ready: {GEMINI_MODEL}")
             return True
         except Exception as e:
-            print(f"  [WARN] Ollama not available: {e}")
-            self._ollama_available = False
+            print(f"  [WARN] Google GenAI initialization error: {e}")
             return False
 
     def initialize(self):
@@ -120,31 +79,9 @@ class RAGEngine:
         )
         print(f"  [OK] Embedding model loaded: {EMBEDDING_MODEL}")
 
-        # Initialize LLM based on provider preference
-        pref = LLM_PROVIDER
-        has_gemini_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
-
-        if pref == "gemini":
-            if not self._init_gemini():
-                print("  [INFO] Gemini failed, attempting Ollama fallback...")
-                self._init_ollama()
-        elif pref == "ollama":
-            if not self._init_ollama():
-                print("  [INFO] Ollama failed, attempting Gemini fallback...")
-                self._init_gemini()
-        else:  # "auto"
-            if has_gemini_key:
-                # Prefer Google GenAI when key is available
-                if not self._init_gemini():
-                    print("  [INFO] Gemini failed, attempting Ollama fallback...")
-                    self._init_ollama()
-            else:
-                if not self._init_ollama():
-                    print("  [INFO] Ollama failed, attempting Gemini fallback...")
-                    self._init_gemini()
-
-        if not self._llm_available:
-            print("  [INFO] Running in retrieval-only mode (no LLM generation)")
+        # Initialize Google GenAI
+        if not self._init_gemini():
+            print("  [INFO] Running in retrieval-only mode (configure GEMINI_API_KEY for AI generation)")
 
         # Load or create vectorstore
         self._load_or_create_vectorstore()
@@ -263,7 +200,7 @@ class RAGEngine:
         }
 
     def _generate_answer(self, question: str, docs: List[Document]) -> str:
-        """Generate answer using active LLM (Gemini or Ollama)."""
+        """Generate answer using Google GenAI."""
         context = "\n\n---\n\n".join(
             [
                 f"Source: {doc.metadata.get('title', 'Unknown')}\n{doc.page_content}"
@@ -284,25 +221,46 @@ Question: {question}
 
 Answer:"""
 
-        try:
-            response = self.llm.invoke(prompt)
-            # Handle string response (Ollama) and AIMessage (ChatGoogleGenerativeAI)
-            if isinstance(response, str):
-                return response
-            elif hasattr(response, "content"):
-                content = response.content
-                if isinstance(content, str):
-                    return content
-                elif isinstance(content, list):
-                    return "".join(
-                        part.get("text", "") if isinstance(part, dict) else str(part)
-                        for part in content
+        models_to_try = [self.active_model, "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]
+        models = [m for m in dict.fromkeys(models_to_try) if m]
+
+        last_error = None
+        for model_name in models:
+            try:
+                if model_name != self.active_model or not self.llm:
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+                    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                    active_llm = ChatGoogleGenerativeAI(
+                        model=model_name,
+                        api_key=api_key,
+                        max_output_tokens=1024,
                     )
-                return str(content)
-            return str(response)
-        except Exception as e:
-            provider_name = self.active_provider or "LLM"
-            return f"Error generating response from {provider_name} ({self.active_model}): {str(e)}"
+                else:
+                    active_llm = self.llm
+
+                response = active_llm.invoke(prompt)
+                self.active_model = model_name
+
+                # Handle response from ChatGoogleGenerativeAI
+                if isinstance(response, str):
+                    return response
+                elif hasattr(response, "content"):
+                    content = response.content
+                    if isinstance(content, str):
+                        return content
+                    elif isinstance(content, list):
+                        return "".join(
+                            part.get("text", "") if isinstance(part, dict) else str(part)
+                            for part in content
+                        )
+                    return str(content)
+                return str(response)
+            except Exception as e:
+                last_error = e
+                continue
+
+        provider_name = self.active_provider or "Google GenAI"
+        return f"Error generating response from {provider_name}: {str(last_error)}"
 
     def _generate_retrieval_answer(
         self, question: str, docs: List[Document]
@@ -325,7 +283,7 @@ Answer:"""
 
         answer_parts.append(
             "\n---\n*Note: This response is generated from document retrieval only. "
-            "Configure GEMINI_API_KEY or start Ollama for AI-generated summaries.*"
+            "Configure GEMINI_API_KEY for AI-generated summaries.*"
         )
 
         return "\n".join(answer_parts)
@@ -342,9 +300,7 @@ Answer:"""
             "llm_available": self._llm_available,
             "active_provider": self.active_provider,
             "active_model": self.active_model,
-            "ollama_available": self._ollama_available,
             "gemini_available": self._gemini_available,
-            "ollama_model": OLLAMA_MODEL,
             "gemini_model": GEMINI_MODEL,
             "embedding_model": EMBEDDING_MODEL,
         }

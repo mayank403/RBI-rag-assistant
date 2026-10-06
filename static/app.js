@@ -301,7 +301,7 @@ async function showStatsModal() {
         const health = await apiHealth();
 
         const activeProviderText = health.active_provider 
-            ? `${health.active_provider === 'gemini' ? 'Google Gemini' : 'Ollama'} (${health.active_model || ''})`
+            ? `Google Gemini (${health.active_model || 'gemini-3.5-flash'})`
             : 'None (Retrieval Only)';
 
         statsGrid.innerHTML = `
@@ -310,7 +310,7 @@ async function showStatsModal() {
                 <div class="stat-value">${stats.total_documents}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Active AI Provider</div>
+                <div class="stat-label">AI Model</div>
                 <div class="stat-value small ${health.llm_available ? 'success' : 'warning'}">
                     ${activeProviderText}
                 </div>
@@ -318,13 +318,7 @@ async function showStatsModal() {
             <div class="stat-card">
                 <div class="stat-label">Google GenAI</div>
                 <div class="stat-value small ${health.gemini_available ? 'success' : 'muted'}">
-                    ${health.gemini_available ? '● Ready' : '○ Not Configured'}
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Ollama (Local)</div>
-                <div class="stat-value small ${health.ollama_available ? 'success' : 'warning'}">
-                    ${health.ollama_available ? '● Connected' : '○ Offline'}
+                    ${health.gemini_available ? '● Connected' : '○ Not Configured'}
                 </div>
             </div>
             <div class="stat-card">
@@ -365,13 +359,7 @@ async function checkHealth() {
         const health = await apiHealth();
         if (health.llm_available) {
             statusDot.className = 'status-dot active';
-            if (health.active_provider === 'gemini') {
-                statusText.textContent = `Gemini Ready (${health.active_model || 'flash'})`;
-            } else if (health.active_provider === 'ollama') {
-                statusText.textContent = `Ollama Ready (${health.active_model || 'llama3'})`;
-            } else {
-                statusText.textContent = 'AI Ready';
-            }
+            statusText.textContent = `Gemini Ready (${health.active_model || 'flash'})`;
         } else {
             statusDot.className = 'status-dot warning';
             statusText.textContent = 'Retrieval Only';
